@@ -58,7 +58,18 @@ export default function ClientPortal({ token, bundle }) {
         </div>
       )}
 
-      {skus.map((sku, i) => {
+      {(() => {
+        const groupOrder = [];
+        for (const s of skus) {
+          const g = s.group_label || '';
+          if (!groupOrder.includes(g)) groupOrder.push(g);
+        }
+        let i = -1;
+        return groupOrder.map((g) => (
+          <div key={g || '__ungrouped'}>
+            {g && <div className="group-header">{g}</div>}
+            {skus.filter((s) => (s.group_label || '') === g).map((sku) => {
+              i += 1;
         const proofsForSku = versions.filter((v) => v.sku_id === sku.id && v.kind === 'proof');
         const latest = proofsForSku[proofsForSku.length - 1];
         const openComments = comments.filter(
@@ -109,7 +120,10 @@ export default function ClientPortal({ token, bundle }) {
             <span className="chev">→</span>
           </button>
         );
-      })}
+            })}
+          </div>
+        ));
+      })()}
 
       <p className="small mt">
         Questions? Call 1-888-207-8731, text 614-353-2369, or email design@made2ordermerch.com.

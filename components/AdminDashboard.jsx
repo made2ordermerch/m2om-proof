@@ -42,7 +42,10 @@ export default function AdminDashboard({ projects }) {
     <main className="wrap">
       <div className="spread mb">
         <h1 className="display">PROOFING · ADMIN</h1>
-        <button className="btn sm" onClick={logout}>LOG OUT</button>
+        <div className="row">
+          <a className="btn sm" href="/api/admin/health" target="_blank" rel="noreferrer">SYSTEM CHECK</a>
+          <button className="btn sm" onClick={logout}>LOG OUT</button>
+        </div>
       </div>
 
       <div className="card yl">

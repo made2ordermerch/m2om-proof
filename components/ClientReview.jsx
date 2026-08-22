@@ -25,6 +25,20 @@ export default function ClientReview({ project, sku, versions, comments, approva
   );
   const selected = versions.find((v) => v.id === selectedId) || null;
 
+  // Auto-select the newest proof when a new version lands mid-session.
+  const latestProofId = proofs.length ? proofs[proofs.length - 1].id : null;
+  const prevLatestRef = useRef(latestProofId);
+  useEffect(() => {
+    if (latestProofId !== prevLatestRef.current) {
+      prevLatestRef.current = latestProofId;
+      if (latestProofId && !approval) setSelectedId(latestProofId);
+      return;
+    }
+    if (!selectedId && (latestProofId || mockups.length)) {
+      setSelectedId(latestProofId ?? mockups[0].id);
+    }
+  }, [latestProofId, selectedId, mockups, approval]);
+
   const [pinMode, setPinMode] = useState(false);
   const [drawMode, setDrawMode] = useState(false);
   const [pendingPin, setPendingPin] = useState(null);

@@ -7,13 +7,13 @@ export const dynamic = 'force-dynamic';
 export async function POST(request, { params }) {
   if (!isAdmin()) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   const projectId = Number(params.id);
-  const { size, product_type, variant_label } = await request.json().catch(() => ({}));
+  const { size, product_type, variant_label, group_label } = await request.json().catch(() => ({}));
   if (!size || !product_type) {
     return Response.json({ error: 'Size and product type are required' }, { status: 400 });
   }
   const rows = await sql`
-    INSERT INTO proof_skus (project_id, size, product_type, variant_label)
-    VALUES (${projectId}, ${size.trim()}, ${product_type.trim()}, ${(variant_label || '').trim()})
+    INSERT INTO proof_skus (project_id, size, product_type, variant_label, group_label)
+    VALUES (${projectId}, ${size.trim()}, ${product_type.trim()}, ${(variant_label || '').trim()}, ${(group_label || '').trim()})
     RETURNING id`;
   await logEvent(projectId, 'sku_added', { sku_id: rows[0].id, size, product_type, variant_label });
   return Response.json({ id: rows[0].id });

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS proof_skus (
   size TEXT NOT NULL,
   product_type TEXT NOT NULL,
   variant_label TEXT NOT NULL DEFAULT '',
+  group_label TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'artwork_ordered',
   approved_version_id INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()

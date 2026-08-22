@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ProofViewer from './ProofViewer';
 
@@ -33,6 +33,23 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
     proofs.length ? proofs[proofs.length - 1].id : mockups.length ? mockups[0].id : null
   );
   const selected = versions.find((v) => v.id === selectedId) || null;
+
+  // Keep the newest proof selected when versions arrive after mount
+  // (first upload into an open panel, or a new version landing mid-session).
+  const latestProofId = proofs.length ? proofs[proofs.length - 1].id : null;
+  const prevLatestRef = useRef(latestProofId);
+  useEffect(() => {
+    if (latestProofId !== prevLatestRef.current) {
+      prevLatestRef.current = latestProofId;
+      if (latestProofId) setSelectedId(latestProofId);
+      return;
+    }
+    if (selectedId && !versions.find((v) => v.id === selectedId)) {
+      setSelectedId(latestProofId ?? (mockups.length ? mockups[0].id : null));
+    } else if (!selectedId && (latestProofId || mockups.length)) {
+      setSelectedId(latestProofId ?? mockups[0].id);
+    }
+  }, [latestProofId, selectedId, versions, mockups]);
 
   const [mode, setMode] = useState('browse');
   const [drawMode, setDrawMode] = useState(false);

@@ -19,31 +19,51 @@ export default function AdminProject({ bundle, portalLink }) {
   const { project, skus, versions, comments, approvals } = bundle;
   const [openSkuId, setOpenSkuId] = useState(skus.length === 1 ? skus[0].id : null);
   const [busy, setBusy] = useState(false);
-  const [newSku, setNewSku] = useState({ size: '', product_type: 'Stand Up Pouch', variant_label: '' });
+  const [newSku, setNewSku] = useState({ size: '', product_type: 'Stand Up Pouch', variant_label: '', group_label: '' });
   const [notifyOnReady, setNotifyOnReady] = useState(true);
 
   async function addSku(e) {
     e.preventDefault();
     if (!newSku.size.trim()) return;
     setBusy(true);
-    await fetch(`/api/projects/${project.id}/skus`, {
+    const res = await fetch(`/api/projects/${project.id}/skus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newSku),
     });
     setBusy(false);
-    setNewSku({ size: '', product_type: newSku.product_type, variant_label: '' });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert('Could not add SKU: ' + (j.error || res.status));
+      return;
+    }
+    setNewSku({ size: '', product_type: newSku.product_type, variant_label: '', group_label: newSku.group_label });
     router.refresh();
   }
 
   async function setStatus(sku, status) {
     setBusy(true);
-    await fetch(`/api/skus/${sku.id}/status`, {
+    const res = await fetch(`/api/skus/${sku.id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, notify: status === 'proof_ready' && notifyOnReady }),
     });
     setBusy(false);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert('Status change failed: ' + (j.error || res.status));
+    }
+    router.refresh();
+  }
+
+  async function saveGroup(sku, value) {
+    if ((sku.group_label || '') === value.trim()) return;
+    const res = await fetch(`/api/skus/${sku.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_label: value.trim() }),
+    });
+    if (!res.ok) alert('Could not save group.');
     router.refresh();
   }
 
@@ -55,7 +75,7 @@ export default function AdminProject({ bundle, portalLink }) {
         access: 'public',
         handleUploadUrl: '/api/upload',
       });
-      await fetch(`/api/skus/${sku.id}/versions`, {
+      const res = await fetch(`/api/skus/${sku.id}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -66,6 +86,10 @@ export default function AdminProject({ bundle, portalLink }) {
           notify: notifyOnReady,
         }),
       });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert('File uploaded but saving the version failed: ' + (j.error || res.status));
+      }
       router.refresh();
     } catch (e) {
       alert('Upload failed: ' + (e?.message || 'unknown error'));
@@ -127,7 +151,16 @@ export default function AdminProject({ bundle, portalLink }) {
         </label>
       </div>
 
-      {skus.map((sku) => {
+      {(() => {
+        const groupOrder = [];
+        for (const s of skus) {
+          const g = s.group_label || '';
+          if (!groupOrder.includes(g)) groupOrder.push(g);
+        }
+        return groupOrder.map((g) => (
+          <div key={g || '__ungrouped'}>
+            {g && <div className="group-header">{g}</div>}
+            {skus.filter((s) => (s.group_label || '') === g).map((sku) => {
         const skuVersions = versions.filter((v) => v.sku_id === sku.id);
         const skuComments = comments.filter((c) => c.sku_id === sku.id);
         const approval = approvals.find((a) => a.sku_id === sku.id);
@@ -152,6 +185,15 @@ export default function AdminProject({ bundle, portalLink }) {
                   </div>
                 )}
 
+                <div className="row mb">
+                  <input
+                    className="input"
+                    style={{ maxWidth: 220 }}
+                    placeholder="Group (optional)"
+                    defaultValue={sku.group_label || ''}
+                    onBlur={(e) => saveGroup(sku, e.target.value)}
+                  />
+                </div>
                 <div className="row mb">
                   <select
                     className="select"
@@ -199,7 +241,10 @@ export default function AdminProject({ bundle, portalLink }) {
             )}
           </div>
         );
-      })}
+            })}
+          </div>
+        ));
+      })()}
 
       <div className="card yl">
         <h2 className="display mb">ADD A SKU</h2>
@@ -237,6 +282,21 @@ export default function AdminProject({ bundle, portalLink }) {
                 value={newSku.variant_label}
                 onChange={(e) => setNewSku({ ...newSku, variant_label: e.target.value })}
               />
+            </div>
+            <div style={{ flex: '1 1 180px' }}>
+              <label className="label">Group (optional)</label>
+              <input
+                className="input"
+                placeholder="Coffee Line"
+                list="sku-groups"
+                value={newSku.group_label}
+                onChange={(e) => setNewSku({ ...newSku, group_label: e.target.value })}
+              />
+              <datalist id="sku-groups">
+                {[...new Set(skus.map((s) => s.group_label).filter(Boolean))].map((g) => (
+                  <option key={g} value={g} />
+                ))}
+              </datalist>
             </div>
           </div>
           <button className="btn bk mt" disabled={busy} type="submit">ADD SKU</button>
