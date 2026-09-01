@@ -14,6 +14,32 @@ const STATUSES = [
   'in_production',
 ];
 
+const PROOF_TYPES = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png'];
+const MOCKUP_TYPES = ['video/mp4'];
+const MAX_BYTES = 200 * 1024 * 1024;
+
+// Blob pathnames are URLs. A designer's filename like
+// "Acme Coffee 6x9 v2 (final) #2.jpg" contains characters that break the PUT or
+// silently truncate the stored path. Reduce it to something URL safe and keep
+// the extension so the browser still renders it as an image.
+function safePathSegment(name) {
+  const raw = String(name || 'file').split(/[\\/]/).pop();
+  const dot = raw.lastIndexOf('.');
+  const base = dot > 0 ? raw.slice(0, dot) : raw;
+  const ext = (dot > 0 ? raw.slice(dot + 1) : '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const clean =
+    base
+      .normalize('NFKD')
+      .replace(/[^A-Za-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'file';
+  return ext ? `${clean}.${ext}` : clean;
+}
+
+function mb(bytes) {
+  return `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`;
+}
+
 export default function AdminProject({ bundle, portalLink }) {
   const router = useRouter();
   const { project, skus, versions, comments, approvals } = bundle;
@@ -21,6 +47,21 @@ export default function AdminProject({ bundle, portalLink }) {
   const [busy, setBusy] = useState(false);
   const [newSku, setNewSku] = useState({ size: '', product_type: 'Stand Up Pouch', variant_label: '', group_label: '' });
   const [notifyOnReady, setNotifyOnReady] = useState(true);
+
+  // Per SKU and per kind upload state, so one upload never disables the whole
+  // page and every failure stays on screen instead of vanishing with an alert.
+  const [uploads, setUploads] = useState({});
+
+  function setUploadState(key, patch) {
+    setUploads((u) => ({ ...u, [key]: { ...(u[key] || {}), ...patch } }));
+  }
+  function clearUploadState(key) {
+    setUploads((u) => {
+      const next = { ...u };
+      delete next[key];
+      return next;
+    });
+  }
 
   async function addSku(e) {
     e.preventDefault();
@@ -67,14 +108,40 @@ export default function AdminProject({ bundle, portalLink }) {
     router.refresh();
   }
 
-  async function uploadFile(sku, file, kind) {
+  async function uploadFile(sku, kind, inputEl) {
+    const file = inputEl?.files?.[0];
+    // Clearing the input immediately is what lets the same file be picked again
+    // after a failure. Without it the change event never fires on retry and the
+    // button appears completely dead.
+    if (inputEl) inputEl.value = '';
     if (!file) return;
-    setBusy(true);
+
+    const key = `${sku.id}:${kind}`;
+    const allowed = kind === 'proof' ? PROOF_TYPES : MOCKUP_TYPES;
+
+    setUploadState(key, { active: true, stage: 'Checking file', error: null, note: null, name: file.name });
+
     try {
-      const blob = await upload(`proofs/${project.id}/${sku.id}/${file.name}`, file, {
+      if (file.size > MAX_BYTES) {
+        throw new Error(`That file is ${mb(file.size)}. The limit is 200 MB.`);
+      }
+      if (!allowed.includes(file.type)) {
+        throw new Error(
+          `This file reports its type as "${file.type || 'unknown'}". ` +
+            (kind === 'proof' ? 'Proofs must be JPG or PNG.' : 'Mockups must be MP4.') +
+            ' Re-export it and try again.'
+        );
+      }
+
+      setUploadState(key, { stage: `Uploading ${mb(file.size)}` });
+      const pathname = `proofs/${project.id}/${sku.id}/${safePathSegment(file.name)}`;
+      const blob = await upload(pathname, file, {
         access: 'public',
         handleUploadUrl: '/api/upload',
+        contentType: file.type || undefined,
       });
+
+      setUploadState(key, { stage: 'Saving version' });
       const res = await fetch(`/api/skus/${sku.id}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -86,15 +153,26 @@ export default function AdminProject({ bundle, portalLink }) {
           notify: notifyOnReady,
         }),
       });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        alert('File uploaded but saving the version failed: ' + (j.error || res.status));
-      }
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || `Could not save the version (HTTP ${res.status}).`);
+
+      const label = kind === 'proof' ? `Proof v${j.version_number}` : `Mockup v${j.version_number}`;
+      setUploadState(key, {
+        active: false,
+        stage: j.notified ? `${label} uploaded and the client was emailed.` : `${label} uploaded.`,
+        note: j.note || null,
+        error: null,
+      });
       router.refresh();
+      if (!j.note) setTimeout(() => clearUploadState(key), 6000);
     } catch (e) {
-      alert('Upload failed: ' + (e?.message || 'unknown error'));
+      console.error('[proof upload]', e);
+      setUploadState(key, {
+        active: false,
+        stage: null,
+        error: e?.message || 'Upload failed for an unknown reason. Check the browser console.',
+      });
     }
-    setBusy(false);
   }
 
   async function regenerateLink(resend) {
@@ -111,6 +189,32 @@ export default function AdminProject({ bundle, portalLink }) {
       alert((resend ? 'New link emailed to the client.\n\n' : '') + 'Portal link copied:\n' + j.link);
       router.refresh();
     }
+  }
+
+  function UploadStatus({ skuId, kind }) {
+    const s = uploads[`${skuId}:${kind}`];
+    if (!s) return null;
+    if (s.error) {
+      return (
+        <div className="notice mt" style={{ borderColor: '#080808' }}>
+          <strong>{kind === 'proof' ? 'PROOF' : 'MOCKUP'} UPLOAD FAILED.</strong>{' '}
+          {s.error}
+          {s.name ? <div className="small mt">File: {s.name}</div> : null}
+          <button
+            className="btn sm mt"
+            onClick={() => clearUploadState(`${skuId}:${kind}`)}
+          >
+            DISMISS
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="notice mt">
+        {s.active ? `${s.stage}…` : s.stage}
+        {s.note ? <div className="small mt">{s.note}</div> : null}
+      </div>
+    );
   }
 
   return (
@@ -165,6 +269,8 @@ export default function AdminProject({ bundle, portalLink }) {
         const skuComments = comments.filter((c) => c.sku_id === sku.id);
         const approval = approvals.find((a) => a.sku_id === sku.id);
         const open = openSkuId === sku.id;
+        const proofBusy = !!uploads[`${sku.id}:proof`]?.active;
+        const mockupBusy = !!uploads[`${sku.id}:mockup`]?.active;
 
         return (
           <div className="card" key={sku.id}>
@@ -207,27 +313,30 @@ export default function AdminProject({ bundle, portalLink }) {
                     ))}
                   </select>
 
-                  <label className="btn sm">
-                    UPLOAD PROOF (JPG/PNG)
+                  <label className="btn sm" style={proofBusy ? { opacity: 0.5 } : undefined}>
+                    {proofBusy ? 'UPLOADING…' : 'UPLOAD PROOF (JPG/PNG)'}
                     <input
                       type="file"
-                      accept="image/jpeg,image/png"
+                      accept="image/jpeg,image/png,.jpg,.jpeg,.png"
                       style={{ display: 'none' }}
-                      disabled={busy}
-                      onChange={(e) => uploadFile(sku, e.target.files?.[0], 'proof')}
+                      disabled={proofBusy}
+                      onChange={(e) => uploadFile(sku, 'proof', e.target)}
                     />
                   </label>
-                  <label className="btn sm">
-                    UPLOAD MOCKUP (MP4)
+                  <label className="btn sm" style={mockupBusy ? { opacity: 0.5 } : undefined}>
+                    {mockupBusy ? 'UPLOADING…' : 'UPLOAD MOCKUP (MP4)'}
                     <input
                       type="file"
-                      accept="video/mp4"
+                      accept="video/mp4,.mp4"
                       style={{ display: 'none' }}
-                      disabled={busy}
-                      onChange={(e) => uploadFile(sku, e.target.files?.[0], 'mockup')}
+                      disabled={mockupBusy}
+                      onChange={(e) => uploadFile(sku, 'mockup', e.target)}
                     />
                   </label>
                 </div>
+
+                <UploadStatus skuId={sku.id} kind="proof" />
+                <UploadStatus skuId={sku.id} kind="mockup" />
 
                 <SkuReview
                   sku={sku}
