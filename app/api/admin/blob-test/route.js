@@ -24,6 +24,26 @@ export async function GET() {
       : 'BASE_URL not set, the SDK will guess from the browser address bar',
   };
 
+  // Vercel Blob calls this URL after a client upload lands. If BASE_URL points
+  // somewhere unreachable the browser leg can stall waiting on it, so prove the
+  // route answers before blaming the file.
+  if (process.env.BASE_URL) {
+    const url = `${process.env.BASE_URL.replace(/\/+$/, '')}/api/upload`;
+    try {
+      const probe = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'probe' }),
+        signal: AbortSignal.timeout(8000),
+      });
+      out.callback_route_reachable = true;
+      out.callback_route_status = probe.status;
+    } catch (e) {
+      out.callback_route_reachable = false;
+      out.callback_route_error = e?.message || String(e);
+    }
+  }
+
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     out.result = 'FAIL';
     out.reason = 'No BLOB_READ_WRITE_TOKEN. Attach a Blob store to this Vercel project, then redeploy.';

@@ -480,3 +480,8 @@ table.plain th { background: var(--of); text-transform: uppercase; font-size: 13
   padding: 4px 14px;
   margin: 8px 0 16px;
 }
+
+/* Upload progress bar (admin proof upload). Separate from .progress-track,
+   which is a segmented step meter and forces flex:1 on its children. */
+.upload-bar { height: 14px; border: 1.5px solid var(--bk); background: var(--wh); margin-top: 10px; }
+.upload-bar > span { display: block; height: 100%; background: var(--yl); transition: width 120ms linear; }

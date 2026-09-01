@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
 import SkuReview, { skuLabel, StatusBadge } from './SkuReview';
@@ -17,6 +17,14 @@ const STATUSES = [
 const PROOF_TYPES = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png'];
 const MOCKUP_TYPES = ['video/mp4'];
 const MAX_BYTES = 200 * 1024 * 1024;
+
+// Above this size a single PUT is fragile on a normal office uplink. Multipart
+// splits the file, uploads parts in parallel and retries individual parts
+// instead of restarting the whole transfer.
+const MULTIPART_ABOVE_BYTES = 8 * 1024 * 1024;
+
+// Hard ceiling so a dead transfer reports itself instead of spinning forever.
+const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
 // Blob pathnames are URLs. A designer's filename like
 // "Acme Coffee 6x9 v2 (final) #2.jpg" contains characters that break the PUT or
@@ -51,6 +59,7 @@ export default function AdminProject({ bundle, portalLink }) {
   // Per SKU and per kind upload state, so one upload never disables the whole
   // page and every failure stays on screen instead of vanishing with an alert.
   const [uploads, setUploads] = useState({});
+  const abortRef = useRef({});
 
   function setUploadState(key, patch) {
     setUploads((u) => ({ ...u, [key]: { ...(u[key] || {}), ...patch } }));
@@ -108,6 +117,11 @@ export default function AdminProject({ bundle, portalLink }) {
     router.refresh();
   }
 
+  function cancelUpload(key) {
+    const ctl = abortRef.current[key];
+    if (ctl) ctl.abort();
+  }
+
   async function uploadFile(sku, kind, inputEl) {
     const file = inputEl?.files?.[0];
     // Clearing the input immediately is what lets the same file be picked again
@@ -118,8 +132,33 @@ export default function AdminProject({ bundle, portalLink }) {
 
     const key = `${sku.id}:${kind}`;
     const allowed = kind === 'proof' ? PROOF_TYPES : MOCKUP_TYPES;
+    const started = Date.now();
 
-    setUploadState(key, { active: true, stage: 'Checking file', error: null, note: null, name: file.name });
+    // A visible clock is the difference between "seems stuck" and a fact.
+    const ticker = setInterval(() => {
+      setUploadState(key, { elapsed: Math.round((Date.now() - started) / 1000) });
+    }, 1000);
+
+    const controller = new AbortController();
+    abortRef.current[key] = controller;
+    const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+    function finish() {
+      clearInterval(ticker);
+      clearTimeout(timeout);
+      delete abortRef.current[key];
+    }
+
+    setUploadState(key, {
+      active: true,
+      stage: 'Checking file',
+      pct: null,
+      elapsed: 0,
+      error: null,
+      note: null,
+      name: file.name,
+      size: file.size,
+    });
 
     try {
       if (file.size > MAX_BYTES) {
@@ -133,15 +172,28 @@ export default function AdminProject({ bundle, portalLink }) {
         );
       }
 
-      setUploadState(key, { stage: `Uploading ${mb(file.size)}` });
+      const multipart = file.size > MULTIPART_ABOVE_BYTES;
+      setUploadState(key, {
+        stage: 'Asking the server for an upload token',
+        multipart,
+      });
+
       const pathname = `proofs/${project.id}/${sku.id}/${safePathSegment(file.name)}`;
       const blob = await upload(pathname, file, {
         access: 'public',
         handleUploadUrl: '/api/upload',
         contentType: file.type || undefined,
+        multipart,
+        abortSignal: controller.signal,
+        onUploadProgress: ({ loaded, total, percentage }) => {
+          setUploadState(key, {
+            stage: `Sending ${mb(loaded)} of ${mb(total)}`,
+            pct: Math.round(percentage),
+          });
+        },
       });
 
-      setUploadState(key, { stage: 'Saving version' });
+      setUploadState(key, { stage: 'Saving version', pct: 100 });
       const res = await fetch(`/api/skus/${sku.id}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -156,9 +208,11 @@ export default function AdminProject({ bundle, portalLink }) {
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error || `Could not save the version (HTTP ${res.status}).`);
 
+      finish();
       const label = kind === 'proof' ? `Proof v${j.version_number}` : `Mockup v${j.version_number}`;
       setUploadState(key, {
         active: false,
+        pct: null,
         stage: j.notified ? `${label} uploaded and the client was emailed.` : `${label} uploaded.`,
         note: j.note || null,
         error: null,
@@ -166,11 +220,17 @@ export default function AdminProject({ bundle, portalLink }) {
       router.refresh();
       if (!j.note) setTimeout(() => clearUploadState(key), 6000);
     } catch (e) {
+      finish();
       console.error('[proof upload]', e);
+      const aborted = controller.signal.aborted;
+      const secs = Math.round((Date.now() - started) / 1000);
       setUploadState(key, {
         active: false,
         stage: null,
-        error: e?.message || 'Upload failed for an unknown reason. Check the browser console.',
+        pct: null,
+        error: aborted
+          ? `Cancelled or timed out after ${secs}s. If the progress bar never moved past 0 percent the browser never reached Vercel Blob, which points at the token step rather than the file.`
+          : e?.message || 'Upload failed for an unknown reason. Check the browser console.',
       });
     }
   }
@@ -211,7 +271,27 @@ export default function AdminProject({ bundle, portalLink }) {
     }
     return (
       <div className="notice mt">
-        {s.active ? `${s.stage}…` : s.stage}
+        <div className="spread">
+          <span>
+            {s.active ? `${s.stage}…` : s.stage}
+            {s.active && typeof s.pct === 'number' ? ` ${s.pct}%` : ''}
+          </span>
+          {s.active ? (
+            <span className="small">
+              {s.elapsed || 0}s{s.multipart ? ' · multipart' : ''}
+            </span>
+          ) : null}
+        </div>
+        {s.active && typeof s.pct === 'number' ? (
+          <div className="upload-bar">
+            <span style={{ width: `${Math.max(2, s.pct)}%` }} />
+          </div>
+        ) : null}
+        {s.active ? (
+          <button className="btn sm mt" onClick={() => cancelUpload(`${skuId}:${kind}`)}>
+            CANCEL
+          </button>
+        ) : null}
         {s.note ? <div className="small mt">{s.note}</div> : null}
       </div>
     );

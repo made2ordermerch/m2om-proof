@@ -5,9 +5,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 // Browsers do not always report the same string for the same file. Windows and
-// some scanners report image/jpg or image/pjpeg for an ordinary JPG. If the
-// reported type is not on this list Vercel Blob rejects the PUT with a 403 and
-// the upload dies with no obvious cause.
+// some export tools report image/jpg or image/pjpeg for an ordinary JPG. If the
+// reported type is not on this list Vercel Blob rejects the PUT and the upload
+// dies with no obvious cause.
 const ALLOWED_CONTENT_TYPES = [
   'image/jpeg',
   'image/jpg',
@@ -44,12 +44,11 @@ export async function POST(request) {
     );
   }
 
-  // The SDK derives the callback URL from window.location on the client. If the
-  // admin is opened on a *.vercel.app preview URL instead of the custom domain,
-  // the callback points at the wrong host. Pin it to BASE_URL.
-  if (type === 'blob.generate-client-token' && body.payload && process.env.BASE_URL) {
-    body.payload.callbackUrl = `${process.env.BASE_URL.replace(/\/+$/, '')}/api/upload`;
-  }
+  // The SDK no longer infers the callback host from the browser address bar, so
+  // it has to be stated. Without this the completion callback never arrives.
+  const callbackUrl = process.env.BASE_URL
+    ? `${process.env.BASE_URL.replace(/\/+$/, '')}/api/upload`
+    : undefined;
 
   try {
     const json = await handleUpload({
@@ -59,9 +58,10 @@ export async function POST(request) {
         allowedContentTypes: ALLOWED_CONTENT_TYPES,
         maximumSizeInBytes: 200 * 1024 * 1024,
         addRandomSuffix: true,
-        // Default is one hour. A large mockup on a slow connection can outrun
-        // that, and the failure reads as a generic access denied.
+        // Default is one hour. A large mockup on a slow uplink can outrun that,
+        // and the failure reads as a generic access denied.
         validUntil: Date.now() + 2 * 60 * 60 * 1000,
+        ...(callbackUrl ? { callbackUrl } : {}),
       }),
       onUploadCompleted: async () => {
         // The version row is written by /api/skus/[id]/versions once the browser
