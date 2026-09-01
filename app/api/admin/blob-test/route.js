@@ -1,5 +1,6 @@
 import { put, del } from '@vercel/blob';
 import { isAdmin } from '@/lib/auth';
+import { BLOB_ACCESS, withSignedUrls } from '@/lib/blob';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -52,12 +53,27 @@ export async function GET() {
 
   try {
     const blob = await put(`diagnostics/blob-test-${Date.now()}.png`, ONE_PIXEL_PNG, {
-      access: 'public',
+      access: BLOB_ACCESS,
       contentType: 'image/png',
       addRandomSuffix: true,
     });
-    out.result = 'PASS';
+    out.store_access_mode = BLOB_ACCESS;
     out.wrote = blob.url;
+
+    // A private store also has to be able to mint read URLs, or every proof
+    // renders as a broken image even though the upload worked.
+    const [signed] = await withSignedUrls([
+      { file_url: blob.url, file_pathname: blob.pathname },
+    ]);
+    if (signed?.signed_url) {
+      out.read_signing = 'PASS';
+      out.signed_url_sample = `${signed.signed_url.slice(0, 90)}…`;
+    } else {
+      out.read_signing = 'FAIL';
+      out.read_signing_reason = signed?.signed_error || 'No signed URL produced.';
+    }
+
+    out.result = out.read_signing === 'PASS' ? 'PASS' : 'FAIL';
     try {
       await del(blob.url);
       out.cleaned_up = true;

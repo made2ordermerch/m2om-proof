@@ -20,6 +20,7 @@ export default function ZoomViewer({
   onPlacePin,
   onFinishDrawing,
   onSelectPin,
+  onImageError,
 }) {
   const frameRef = useRef(null);
   const layerRef = useRef(null);
@@ -209,7 +210,17 @@ export default function ZoomViewer({
         className="zoom-layer"
         style={{ transform: `translate(${t.x}px, ${t.y}px) scale(${t.s})` }}
       >
-        <img src={imageUrl} alt="Design proof" draggable={false} />
+        <img
+        src={imageUrl}
+        alt="Design proof"
+        draggable={false}
+        onError={(e) => {
+          // Signed proof links expire. A failed load here almost always means
+          // the page has been open longer than the link was valid.
+          e.currentTarget.dataset.failed = '1';
+          if (typeof onImageError === 'function') onImageError();
+        }}
+      />
 
         <svg
           viewBox="0 0 100 100"

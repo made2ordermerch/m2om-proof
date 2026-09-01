@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
+import { BLOB_ACCESS } from '@/lib/blob';
 import SkuReview, { skuLabel, StatusBadge } from './SkuReview';
 
 const STATUSES = [
@@ -180,7 +181,7 @@ export default function AdminProject({ bundle, portalLink }) {
 
       const pathname = `proofs/${project.id}/${sku.id}/${safePathSegment(file.name)}`;
       const blob = await upload(pathname, file, {
-        access: 'public',
+        access: BLOB_ACCESS,
         handleUploadUrl: '/api/upload',
         contentType: file.type || undefined,
         multipart,
@@ -229,8 +230,8 @@ export default function AdminProject({ bundle, portalLink }) {
         stage: null,
         pct: null,
         error: aborted
-          ? `Cancelled or timed out after ${secs}s. If the progress bar never moved past 0 percent the browser never reached Vercel Blob, which points at the token step rather than the file.`
-          : e?.message || 'Upload failed for an unknown reason. Check the browser console.',
+          ? `Stopped after ${secs}s. Either you pressed cancel, or the transfer ran past the ${Math.round(UPLOAD_TIMEOUT_MS / 60000)} minute limit.`
+          : `${e?.message || 'Upload failed for an unknown reason.'} (after ${secs}s)`,
       });
     }
   }

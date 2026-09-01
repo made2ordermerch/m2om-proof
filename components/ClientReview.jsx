@@ -51,6 +51,9 @@ export default function ClientReview({ project, sku, versions, comments, approva
   const [replyText, setReplyText] = useState('');
   const [busy, setBusy] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  // Signed proof links expire. Track a failed image load so the client is told
+  // to reload rather than staring at an empty frame.
+  const [linkExpired, setLinkExpired] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [editsOpen, setEditsOpen] = useState(false);
   const [checks, setChecks] = useState(APPROVAL_CHECKS.map(() => false));
@@ -315,13 +318,13 @@ export default function ClientReview({ project, sku, versions, comments, approva
 
             {selected && selected.kind === 'mockup' && (
               <div className="zoom-frame">
-                <video src={selected.file_url} controls playsInline style={{ display: 'block', width: '100%' }} />
+                <video src={selected.signed_url || selected.file_url} controls playsInline style={{ display: 'block', width: '100%' }} />
               </div>
             )}
 
             {selected && selected.kind === 'proof' && (
               <ZoomViewer
-                imageUrl={selected.file_url}
+                imageUrl={selected.signed_url || selected.file_url}
                 pins={pins}
                 drawings={drawingsData}
                 pinMode={pinMode}
@@ -331,7 +334,15 @@ export default function ClientReview({ project, sku, versions, comments, approva
                 onPlacePin={(p) => { setPendingPin(p); setPendingDrawing(null); }}
                 onFinishDrawing={(pts) => { setPendingDrawing(pts); setPendingPin(null); }}
                 onSelectPin={jumpToPin}
+                onImageError={() => setLinkExpired(true)}
               />
+            )}
+
+            {linkExpired && (
+              <div className="notice mt">
+                This proof link has expired for security. Reload the page to get a fresh one.
+                <button className="btn sm mt" onClick={() => router.refresh()}>RELOAD</button>
+              </div>
             )}
 
             {selected && selected.kind === 'proof' && !pinMode && (

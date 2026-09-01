@@ -15,6 +15,7 @@ export default function ProofViewer({
   onPlacePin,      // ({x, y}) => void
   onFinishDrawing, // (points) => void
   onSelectPin,     // (id) => void
+  onImageError,    // () => void, fired when a signed proof link has expired
 }) {
   const frameRef = useRef(null);
   const [stroke, setStroke] = useState(null);
@@ -67,7 +68,17 @@ export default function ProofViewer({
       onPointerCancel={pointerUp}
       style={drawMode ? { touchAction: 'none' } : undefined}
     >
-      <img src={imageUrl} alt="Design proof" draggable={false} />
+      <img
+        src={imageUrl}
+        alt="Design proof"
+        draggable={false}
+        onError={(e) => {
+          // Signed proof links expire. A failed load here almost always means
+          // the page has been open longer than the link was valid.
+          e.currentTarget.dataset.failed = '1';
+          if (typeof onImageError === 'function') onImageError();
+        }}
+      />
 
       <svg
         viewBox="0 0 100 100"

@@ -61,6 +61,9 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
   const [replyText, setReplyText] = useState('');
   const [internal, setInternal] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Signed proof links expire. Track a failed image load so the person is told
+  // to reload rather than staring at an empty frame.
+  const [linkExpired, setLinkExpired] = useState(false);
 
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['x-proof-token'] = token;
@@ -231,7 +234,7 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
 
       {selected && selected.kind === 'mockup' && (
         <div className="viewer-frame">
-          <video src={selected.file_url} controls playsInline style={{ display: 'block', width: '100%' }} />
+          <video src={selected.signed_url || selected.file_url} controls playsInline style={{ display: 'block', width: '100%' }} />
         </div>
       )}
 
@@ -270,7 +273,7 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
           )}
 
           <ProofViewer
-            imageUrl={selected.file_url}
+            imageUrl={selected.signed_url || selected.file_url}
             pins={pins}
             drawings={drawingsData}
             mode={mode}
@@ -280,7 +283,15 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
             onPlacePin={(p) => { setPendingPin(p); setPendingDrawing(null); }}
             onFinishDrawing={(points) => { setPendingDrawing(points); setPendingPin(null); }}
             onSelectPin={(id) => { setActivePinId(id === activePinId ? null : id); setReplyText(''); }}
+            onImageError={() => setLinkExpired(true)}
           />
+
+          {linkExpired && (
+            <div className="notice mt">
+              This proof link has expired. Reload the page to get a fresh one.
+              <button className="btn sm mt" onClick={() => router.refresh()}>RELOAD</button>
+            </div>
+          )}
 
           {(pendingPin || pendingDrawing) && (
             <div className="card yl mt">

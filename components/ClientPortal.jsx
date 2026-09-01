@@ -86,7 +86,7 @@ export default function ClientPortal({ token, bundle }) {
           >
             <span className="thumb">
               {latest ? (
-                <img src={latest.file_url} alt="" />
+                <img src={latest.signed_url || latest.file_url} alt="" />
               ) : (
                 <span className="noart">IN THE WORKS</span>
               )}
