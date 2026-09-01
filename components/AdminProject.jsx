@@ -303,6 +303,7 @@ export default function AdminProject({ bundle, portalLink }) {
       <div className="spread mb">
         <div>
           <h1 className="display">{project.ref}</h1>
+          <p className="small" style={{ fontWeight: 800 }}>PROJECT #{project.id}</p>
           <p style={{ fontWeight: 700 }}>
             {project.client_name} · {project.client_email}
             {project.shopify_order_id ? ` · Shopify ${project.shopify_order_id}` : ''}
@@ -318,6 +319,16 @@ export default function AdminProject({ bundle, portalLink }) {
             {portalLink || 'No active link. Generate one below.'}
           </div>
           <div className="row">
+            {portalLink && (
+              <a
+                className="btn sm bk"
+                href={portalLink}
+                target="_blank"
+                rel="noreferrer"
+              >
+                OPEN CLIENT VIEW
+              </a>
+            )}
             <button className="btn sm" disabled={busy} onClick={() => regenerateLink(false)}>
               NEW LINK + COPY
             </button>
