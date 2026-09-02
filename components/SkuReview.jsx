@@ -57,7 +57,7 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
   const [pendingDrawing, setPendingDrawing] = useState(null);
   const [activePinId, setActivePinId] = useState(null);
   const [pinText, setPinText] = useState('');
-  const [generalText, setGeneralText] = useState('');
+  const [panelText, setPanelText] = useState('');
   const [replyText, setReplyText] = useState('');
   const [internal, setInternal] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -76,9 +76,7 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
   const drawingsData = versionComments
     .filter((c) => c.drawing && !c.parent_id)
     .map((c) => ({ id: c.id, points: c.drawing, resolved: c.resolved }));
-  const generals = comments.filter(
-    (c) => c.sku_id === sku.id && !c.parent_id && c.pin_x === null && !c.drawing
-  );
+  const threads = comments.filter((c) => c.sku_id === sku.id && !c.parent_id);
   const replies = (parentId) => comments.filter((c) => c.parent_id === parentId);
 
   async function post(url, body) {
@@ -113,15 +111,15 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
     }
   }
 
-  async function submitGeneral() {
-    if (!generalText.trim()) return;
+  async function submitPanelComment() {
+    if (!panelText.trim()) return;
     const ok = await post('/api/comments', {
       sku_id: sku.id,
-      version_id: null,
-      body: generalText.trim(),
+      version_id: selected?.id || null,
+      body: panelText.trim(),
       internal: showInternalToggle ? internal : false,
     });
-    if (ok) setGeneralText('');
+    if (ok) setPanelText('');
   }
 
   async function submitReply(parentId) {
@@ -152,11 +150,19 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
 
   const activePin = pins.find((p) => p.id === activePinId);
 
+  function versionLabelFor(c) {
+    if (!c.version_id) return null;
+    const v = versions.find((x) => x.id === c.version_id);
+    return v ? `V${v.version_number}` : null;
+  }
+
   function Thread({ c, anchored }) {
+    const vLabel = versionLabelFor(c);
     return (
       <div className={`comment ${c.internal ? 'internal' : ''} ${c.resolved ? 'resolved' : ''}`}>
         <div className="meta">
-          {anchored && c.pin_number ? `PIN ${c.pin_number} · ` : ''}
+          {anchored && c.pin_number ? `PIN ${c.pin_number} · ` : anchored && c.drawing ? 'MARKUP · ' : ''}
+          {vLabel ? `${vLabel} · ` : ''}
           {c.author_name}
           {c.internal ? ' · INTERNAL' : ''}
           {c.resolved ? ' · RESOLVED' : ''}
@@ -325,29 +331,21 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
             </div>
           )}
 
-          {/* Pinned threads for this version */}
-          {pins.length > 0 && (
-            <div className="mt">
-              <h3 className="display mb">PINNED COMMENTS · v{selected.version_number}</h3>
-              {pins.map((p) => <Thread key={p.id} c={p} anchored />)}
-            </div>
-          )}
-          {drawingsData.length > 0 && versionComments.filter((c) => c.drawing && !c.parent_id).map((c) => (
-            <Thread key={c.id} c={c} anchored />
-          ))}
         </>
       )}
 
-      {/* General comments at the design level */}
+      {/* One comment stream for the whole design, anchored or not. */}
       <div className="mt">
-        <h3 className="display mb">GENERAL COMMENTS</h3>
-        {generals.length === 0 && <p className="small mb">No general comments yet.</p>}
-        {generals.map((c) => <Thread key={c.id} c={c} />)}
+        <h3 className="display mb">COMMENTS ({threads.length})</h3>
+        {threads.length === 0 && <p className="small mb">No comments yet.</p>}
+        {threads.map((c) => (
+          <Thread key={c.id} c={c} anchored={!!(c.pin_number || c.drawing)} />
+        ))}
         <textarea
           className="textarea"
-          value={generalText}
-          onChange={(e) => setGeneralText(e.target.value)}
-          placeholder="Leave a general comment about this design"
+          value={panelText}
+          onChange={(e) => setPanelText(e.target.value)}
+          placeholder="Write a comment"
         />
         {showInternalToggle && (
           <label className="row mt small" style={{ fontWeight: 700 }}>
@@ -355,8 +353,8 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
             Internal only (client never sees this)
           </label>
         )}
-        <button className="btn sm mt" disabled={busy} onClick={submitGeneral}>
-          POST GENERAL COMMENT
+        <button className="btn sm mt" disabled={busy || !panelText.trim()} onClick={submitPanelComment}>
+          POST COMMENT
         </button>
       </div>
     </div>

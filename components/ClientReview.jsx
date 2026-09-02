@@ -45,8 +45,7 @@ export default function ClientReview({ project, sku, versions, comments, approva
   const [pendingDrawing, setPendingDrawing] = useState(null);
   const [composerText, setComposerText] = useState('');
   const [activePinId, setActivePinId] = useState(null);
-  const [tab, setTab] = useState('pinned');
-  const [generalText, setGeneralText] = useState('');
+  const [panelText, setPanelText] = useState('');
   const [replyFor, setReplyFor] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -77,7 +76,7 @@ export default function ClientReview({ project, sku, versions, comments, approva
   const pins = versionComments.filter((c) => c.pin_x !== null && !c.parent_id);
   const drawingThreads = versionComments.filter((c) => c.drawing && !c.parent_id);
   const drawingsData = drawingThreads.map((c) => ({ id: c.id, points: c.drawing, resolved: c.resolved }));
-  const generals = comments.filter((c) => !c.parent_id && c.pin_x === null && !c.drawing);
+  const threads = comments.filter((c) => !c.parent_id);
   const replies = (id) => comments.filter((c) => c.parent_id === id);
   const anchored = [...pins, ...drawingThreads];
   const openCount = comments.filter((c) => !c.parent_id && !c.resolved).length;
@@ -113,14 +112,19 @@ export default function ClientReview({ project, sku, versions, comments, approva
       setPendingDrawing(null);
       setPinMode(false);
       setDrawMode(false);
-      setTab('pinned');
     }
   }
 
-  async function submitGeneral() {
-    if (!generalText.trim()) return;
-    const ok = await post('/api/comments', { sku_id: sku.id, version_id: null, body: generalText.trim() });
-    if (ok) setGeneralText('');
+  // Same endpoint, same thread list. The only difference is that nothing is
+  // anchored to a spot on the artwork.
+  async function submitPanelComment() {
+    if (!panelText.trim()) return;
+    const ok = await post('/api/comments', {
+      sku_id: sku.id,
+      version_id: selected?.id || null,
+      body: panelText.trim(),
+    });
+    if (ok) setPanelText('');
   }
 
   async function submitReply(parentId) {
@@ -170,7 +174,7 @@ export default function ClientReview({ project, sku, versions, comments, approva
 
   function jumpToPin(id) {
     setActivePinId(id);
-    setTab('pinned');
+    // No tab to switch to now, the thread is always in the one list.
     const el = threadRefs.current[id];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -196,8 +200,16 @@ export default function ClientReview({ project, sku, versions, comments, approva
     setComposerText('');
   }
 
+  function versionLabelFor(c) {
+    if (!c.version_id) return null;
+    const v = versions.find((x) => x.id === c.version_id);
+    if (!v) return null;
+    return `V${v.version_number}`;
+  }
+
   function Thread({ c }) {
     const isAnchor = c.pin_number || c.drawing;
+    const vLabel = versionLabelFor(c);
     return (
       <div
         ref={(el) => { threadRefs.current[c.id] = el; }}
@@ -205,6 +217,7 @@ export default function ClientReview({ project, sku, versions, comments, approva
       >
         <div className="meta">
           {c.pin_number ? `PIN ${c.pin_number} · ` : c.drawing ? 'MARKUP · ' : ''}
+          {vLabel ? `${vLabel} · ` : ''}
           {c.author_role === 'team' ? 'DESIGN TEAM' : c.author_name}
           {c.resolved ? ' · RESOLVED' : ''}
         </div>
@@ -355,38 +368,34 @@ export default function ClientReview({ project, sku, versions, comments, approva
           </div>
 
           <div className="panel-col mt">
-            <div className="tabs">
-              <button className={tab === 'pinned' ? 'active' : ''} onClick={() => setTab('pinned')}>
-                ON ARTWORK ({anchored.length})
+            <div className="group-header">COMMENTS ({threads.length})</div>
+
+            {threads.length === 0 && (
+              <div className="card off">
+                <p>No comments yet. Write one below, or tap <strong>COMMENT ON THE ARTWORK</strong> to pin it to an exact spot.</p>
+              </div>
+            )}
+
+            {threads.map((c) => <Thread key={c.id} c={c} />)}
+
+            <div className="card off mt">
+              <textarea
+                className="textarea"
+                value={panelText}
+                onChange={(e) => setPanelText(e.target.value)}
+                placeholder="Write a comment"
+              />
+              <button
+                className="btn sm bk mt"
+                disabled={busy || !panelText.trim()}
+                onClick={submitPanelComment}
+              >
+                {busy ? 'POSTING...' : 'POST COMMENT'}
               </button>
-              <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>
-                GENERAL ({generals.length})
-              </button>
+              <p className="small mt">
+                To point at an exact spot on the artwork, use COMMENT ON THE ARTWORK instead.
+              </p>
             </div>
-
-            {tab === 'pinned' && (
-              <>
-                {anchored.length === 0 && (
-                  <div className="card off">
-                    <p>No comments on this version yet. Tap <strong>COMMENT ON THE ARTWORK</strong> and then the exact spot you want changed.</p>
-                  </div>
-                )}
-                {anchored.map((c) => <Thread key={c.id} c={c} />)}
-              </>
-            )}
-
-            {tab === 'general' && (
-              <>
-                {generals.map((c) => <Thread key={c.id} c={c} />)}
-                <textarea
-                  className="textarea"
-                  value={generalText}
-                  onChange={(e) => setGeneralText(e.target.value)}
-                  placeholder="Overall thoughts, direction, anything not tied to one spot"
-                />
-                <button className="btn sm mt" disabled={busy} onClick={submitGeneral}>POST GENERAL COMMENT</button>
-              </>
-            )}
           </div>
         </div>
       </div>
