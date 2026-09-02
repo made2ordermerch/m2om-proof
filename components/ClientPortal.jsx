@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import useLiveRefresh from '@/lib/useLiveRefresh';
 import ClientReview from './ClientReview';
 import { skuLabel, StatusBadge } from './SkuReview';
 
 export default function ClientPortal({ token, bundle }) {
   const { project, skus, versions, comments, approvals } = bundle;
   const [openSkuId, setOpenSkuId] = useState(null);
+
+  // Clients leave this tab open waiting on a proof. Keep it current.
+  useLiveRefresh();
 
   const openSku = skus.find((s) => s.id === openSkuId);
 

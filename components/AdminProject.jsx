@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
 import { BLOB_ACCESS } from '@/lib/blob';
+import useLiveRefresh from '@/lib/useLiveRefresh';
 import SkuReview, { skuLabel, StatusBadge } from './SkuReview';
 
 const STATUSES = [
@@ -61,6 +62,9 @@ export default function AdminProject({ bundle, portalLink }) {
   // page and every failure stays on screen instead of vanishing with an alert.
   const [uploads, setUploads] = useState({});
   const abortRef = useRef({});
+
+  // Picks up client comments and approvals without a manual reload.
+  useLiveRefresh();
 
   function setUploadState(key, patch) {
     setUploads((u) => ({ ...u, [key]: { ...(u[key] || {}), ...patch } }));
