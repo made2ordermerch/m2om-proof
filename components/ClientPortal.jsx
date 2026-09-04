@@ -1,16 +1,37 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useLiveRefresh from '@/lib/useLiveRefresh';
 import ClientReview from './ClientReview';
 import { skuLabel, StatusBadge } from './SkuReview';
 
-export default function ClientPortal({ token, bundle }) {
+export default function ClientPortal({ token, bundle, returning = false }) {
   const { project, skus, versions, comments, approvals } = bundle;
   const [openSkuId, setOpenSkuId] = useState(null);
+  // A brand that has approved with us before does not need the walkthrough
+  // opened for them again. An explicit choice below still overrides this.
+  const [howOpen, setHowOpen] = useState(!returning);
 
   // Clients leave this tab open waiting on a proof. Keep it current.
   useLiveRefresh();
+
+  // First visit gets the full explainer. After someone collapses it, respect
+  // that on every return visit rather than making them dismiss it each time.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(`m2om-how-${project.ref}`);
+      if (stored === 'closed') setHowOpen(false);
+      if (stored === 'open') setHowOpen(true);
+    } catch {}
+  }, [project.ref]);
+
+  function toggleHow() {
+    const next = !howOpen;
+    setHowOpen(next);
+    try {
+      window.localStorage.setItem(`m2om-how-${project.ref}`, next ? 'open' : 'closed');
+    } catch {}
+  }
 
   const openSku = skus.find((s) => s.id === openSkuId);
 
@@ -36,6 +57,61 @@ export default function ClientPortal({ token, bundle }) {
       <p className="mb" style={{ fontWeight: 800 }}>
         {project.ref} · {project.client_name}
       </p>
+
+      <div className="card">
+        <div className="spread">
+          <h2 className="display">HOW THIS WORKS</h2>
+          <button className="btn sm ghost" onClick={toggleHow}>
+            {howOpen ? 'HIDE' : 'SHOW ME AGAIN'}
+          </button>
+        </div>
+
+        {howOpen && (
+          <div className="mt">
+            <p>
+              This is where you review your artwork and give us the go ahead to print.
+              Every design in your order is reviewed and approved on its own, so you can
+              sign off on one while another is still being worked on.
+            </p>
+
+            <ol className="how-list">
+              <li>
+                <strong>We upload a proof.</strong> You get an email each time one is ready.
+                Nothing needs doing until then.
+              </li>
+              <li>
+                <strong>You look it over.</strong> Open a design and zoom in as far as you
+                need. Check spelling, sizes, weights, barcodes, and colors.
+              </li>
+              <li>
+                <strong>You tell us what to change.</strong> Write a comment, or tap
+                COMMENT ON THE ARTWORK and point at the exact spot. Being specific here
+                saves a round.
+              </li>
+              <li>
+                <strong>We send a new version.</strong> Your comments stay attached to the
+                version they were written on, so nothing gets lost between rounds. Go back
+                and forth as many times as it takes.
+              </li>
+              <li>
+                <strong>You approve for print.</strong> Confirm the checklist, type your
+                name, and that design goes into production.
+              </li>
+            </ol>
+
+            <div className="notice mt">
+              <strong>What approval means.</strong> We print exactly the file you approved.
+              Once a design is approved it moves into production and can no longer be
+              changed, so please read it closely first. Colors on a screen are a guide, not
+              an exact match to printed material.
+            </div>
+
+            <p className="small mt">
+              Anything you are unsure about, leave it as a comment and we will answer it here.
+            </p>
+          </div>
+        )}
+      </div>
 
       {skus.length > 0 && (
         <div className="card off" style={{ animation: 'fadeUp 0.25s ease both' }}>

@@ -1,5 +1,5 @@
 import { projectFromToken } from '@/lib/auth';
-import { getProjectBundle } from '@/lib/data';
+import { getProjectBundle, hasApprovedBefore } from '@/lib/data';
 import ClientPortal from '@/components/ClientPortal';
 
 export const dynamic = 'force-dynamic';
@@ -22,5 +22,6 @@ export default async function ClientPortalPage({ params }) {
   }
 
   const bundle = await getProjectBundle(project.id, { includeInternal: false });
-  return <ClientPortal token={params.token} bundle={bundle} />;
+  const returning = await hasApprovedBefore(project.client_email, project.id);
+  return <ClientPortal token={params.token} bundle={bundle} returning={returning} />;
 }

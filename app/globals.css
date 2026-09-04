@@ -485,3 +485,9 @@ table.plain th { background: var(--of); text-transform: uppercase; font-size: 13
    which is a segmented step meter and forces flex:1 on its children. */
 .upload-bar { height: 14px; border: 1.5px solid var(--bk); background: var(--wh); margin-top: 10px; }
 .upload-bar > span { display: block; height: 100%; background: var(--yl); transition: width 120ms linear; }
+
+/* Numbered walkthrough on the client portal landing page. */
+.how-list { margin: 14px 0 0; padding-left: 22px; }
+.how-list li { margin-bottom: 12px; line-height: 1.5; }
+.how-list li strong { display: block; }
+@media (max-width: 767px) { .how-list { padding-left: 18px; } }
