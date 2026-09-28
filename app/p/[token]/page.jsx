@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache';
 import { projectFromToken } from '@/lib/auth';
 import { getProjectBundle, hasApprovedBefore } from '@/lib/data';
 import ClientPortal from '@/components/ClientPortal';
@@ -5,6 +6,10 @@ import ClientPortal from '@/components/ClientPortal';
 export const dynamic = 'force-dynamic';
 
 export default async function ClientPortalPage({ params, searchParams }) {
+  // This page reads no cookies or headers, so nothing else marks it as
+  // uncacheable. Say so explicitly: a client must never see a render that
+  // predates the latest proof.
+  noStore();
   const project = await projectFromToken(params.token);
 
   if (!project) {
