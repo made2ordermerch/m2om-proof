@@ -16,7 +16,7 @@ export async function POST(request) {
     ORDER BY id DESC LIMIT 5`;
 
   for (const project of projects) {
-    const token = await createTokenForProject(project.id);
+    const token = await createTokenForProject(project.id, { retireOthers: true });
     const link = `${process.env.BASE_URL}/p/${token}`;
     const mail = inviteEmail({ ref: project.ref, link, clientName: project.client_name });
     await sendEmail({ to: project.client_email, ...mail });

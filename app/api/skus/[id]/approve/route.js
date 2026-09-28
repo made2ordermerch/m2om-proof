@@ -3,7 +3,7 @@ import { sql } from '@/lib/db';
 import { skuWithProject, logEvent } from '@/lib/data';
 import { sendEmail, internalRecipients } from '@/lib/email';
 import { approvalConfirmedEmail, internalEmail } from '@/lib/templates';
-import { skuLabel, APPROVAL_STATEMENT } from '@/lib/statuses';
+import { skuLabel, APPROVAL_STATEMENT, portalLink } from '@/lib/statuses';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,19 +29,31 @@ export async function POST(request, { params }) {
     );
   }
 
-  // Approve the latest proof version, or the one explicitly passed if it belongs here.
-  let versions = await sql`
+  const versions = await sql`
     SELECT * FROM proof_versions
     WHERE sku_id = ${skuId} AND kind = 'proof'
     ORDER BY version_number DESC`;
   if (!versions.length) {
     return Response.json({ error: 'No proof to approve yet.' }, { status: 400 });
   }
-  let version = versions[0];
-  if (version_id) {
-    const match = versions.find((v) => v.id === Number(version_id));
-    if (match) version = match;
+
+  // Only the newest proof can ever be approved. The browser says which version
+  // it is looking at; if a newer one has landed since that tab loaded, the
+  // approval is refused and the client is told to reload. Without this a
+  // client on a stale tab could sign off v1 after v2 was uploaded, and v1 is
+  // what would lock and go to print.
+  const latest = versions[0];
+  if (version_id && Number(version_id) !== latest.id) {
+    return Response.json(
+      {
+        error: `A newer proof (v${latest.version_number}) has been uploaded since this page loaded. Reload to review the latest version before approving.`,
+        stale: true,
+        latest_version_id: latest.id,
+      },
+      { status: 409 }
+    );
   }
+  const version = latest;
 
   const ip =
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -61,7 +73,7 @@ export async function POST(request, { params }) {
     typed_name: typed_name.trim(),
   });
 
-  const link = `${process.env.BASE_URL}/p/${token}`;
+  const link = portalLink(token, skuId);
   const clientMail = approvalConfirmedEmail({
     ref: project.ref,
     link,
@@ -81,5 +93,5 @@ export async function POST(request, { params }) {
   });
   await sendEmail({ to: internalRecipients(), ...teamMail });
 
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, version_number: version.version_number });
 }

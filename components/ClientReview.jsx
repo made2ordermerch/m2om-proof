@@ -57,6 +57,10 @@ export default function ClientReview({ project, sku, versions, comments, approva
   const [editsOpen, setEditsOpen] = useState(false);
   const [checks, setChecks] = useState(APPROVAL_CHECKS.map(() => false));
   const [typedName, setTypedName] = useState('');
+  const [editsNote, setEditsNote] = useState('');
+  // Errors show in the page, not in a browser alert. On a phone an alert
+  // covers the artwork and reads like the site crashed.
+  const [notice, setNotice] = useState(null); // { text, stale }
   const threadRefs = useRef({});
 
   useEffect(() => {
@@ -86,11 +90,24 @@ export default function ClientReview({ project, sku, versions, comments, approva
 
   async function post(url, body) {
     setBusy(true);
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    setNotice(null);
+    let res;
+    try {
+      res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    } catch {
+      setBusy(false);
+      setNotice({ text: 'No connection. Check your signal and try again.' });
+      return false;
+    }
     setBusy(false);
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      alert(j.error || 'Something went wrong. Try again.');
+      if (res.status === 401) {
+        setNotice({ text: 'This portal link has expired. Reload to request a fresh one.', stale: true });
+      } else {
+        setNotice({ text: j.error || 'Something went wrong. Try again.', stale: !!j.stale });
+      }
+      if (j.stale) router.refresh();
       return false;
     }
     router.refresh();
@@ -153,8 +170,11 @@ export default function ClientReview({ project, sku, versions, comments, approva
   }
 
   async function requestEdits() {
-    const ok = await post(`/api/skus/${sku.id}/request-edits`, {});
-    if (ok) setEditsOpen(false);
+    const ok = await post(`/api/skus/${sku.id}/request-edits`, { note: editsNote.trim() });
+    if (ok) {
+      setEditsOpen(false);
+      setEditsNote('');
+    }
   }
 
   async function approve() {
@@ -165,12 +185,15 @@ export default function ClientReview({ project, sku, versions, comments, approva
       agreed: true,
       version_id: latest?.id,
     });
+    setApproveOpen(false);
     if (ok) {
-      setApproveOpen(false);
       setTypedName('');
       setChecks(APPROVAL_CHECKS.map(() => false));
     }
   }
+
+  const latestProof = proofs.length ? proofs[proofs.length - 1] : null;
+  const viewingOlder = !!(selected && selected.kind === 'proof' && latestProof && selected.id !== latestProof.id);
 
   function jumpToPin(id) {
     setActivePinId(id);
@@ -266,17 +289,31 @@ export default function ClientReview({ project, sku, versions, comments, approva
         <button className="icon-btn" onClick={onBack} aria-label="Back to all designs">←</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="title">{skuLabel(sku)}</div>
-          <div className="sub">{project.ref}</div>
+          <div className="sub">
+            <span>{project.ref}</span>
+            <StatusBadge status={sku.status} audience="client" />
+          </div>
         </div>
-        <StatusBadge status={sku.status} />
       </div>
 
       <div className="wrap" style={{ paddingTop: 16 }}>
+        {notice && (
+          <div className="notice error" role="alert">
+            {notice.text}
+            <div className="row mt">
+              {notice.stale && (
+                <button className="btn sm bk" onClick={() => window.location.reload()}>RELOAD</button>
+              )}
+              <button className="btn sm ghost" onClick={() => setNotice(null)}>DISMISS</button>
+            </div>
+          </div>
+        )}
+
         {showHint && (
           <div className="card yl" style={{ animation: 'fadeUp 0.25s ease both' }}>
             <h3 className="display mb">HOW TO REVIEW</h3>
             <p><strong>1.</strong> Zoom in and check every detail: spelling, sizing, weights, barcodes, colors.</p>
-            <p><strong>2.</strong> Tap ADD COMMENT, then tap the exact spot on the artwork.</p>
+            <p><strong>2.</strong> Tap COMMENT ON THE ARTWORK, then tap the exact spot.</p>
             <p><strong>3.</strong> One thorough round beats five quick ones. Flag everything you see, then approve when it is perfect.</p>
             <button className="btn sm bk mt" onClick={dismissHint}>GOT IT</button>
           </div>
@@ -298,7 +335,7 @@ export default function ClientReview({ project, sku, versions, comments, approva
                     className={`pill ${v.id === selectedId ? 'active' : ''}`}
                     onClick={() => { setSelectedId(v.id); setActivePinId(null); exitPinMode(); }}
                   >
-                    v{v.version_number}{v.locked ? ' ✓' : ''}
+                    v{v.version_number}{v.locked ? ' ✓' : ''}{latestProof && v.id === latestProof.id && proofs.length > 1 ? ' · LATEST' : ''}
                   </button>
                 ))}
                 {mockups.map((v) => (
@@ -320,6 +357,13 @@ export default function ClientReview({ project, sku, versions, comments, approva
                   <button className={`pill ${drawMode ? 'active' : ''}`} onClick={() => setDrawMode(!drawMode)}>✎ DRAW</button>
                   <button className="pill" onClick={exitPinMode}>CANCEL</button>
                 </span>
+              </div>
+            )}
+
+            {viewingOlder && !isLockedState && (
+              <div className="notice mb">
+                You are looking at v{selected.version_number}. The latest is v{latestProof.version_number}, which is the one that gets approved.
+                <button className="btn sm mt" onClick={() => { setSelectedId(latestProof.id); setActivePinId(null); exitPinMode(); }}>SHOW LATEST</button>
               </div>
             )}
 
@@ -448,6 +492,13 @@ export default function ClientReview({ project, sku, versions, comments, approva
                 <strong>{openCount} open comment{openCount === 1 ? '' : 's'}</strong> will go with it. One thorough
                 round beats five quick ones, so make sure everything you want changed is pinned or commented first.
               </p>
+              <textarea
+                className="textarea mt"
+                value={editsNote}
+                onChange={(e) => setEditsNote(e.target.value)}
+                placeholder="Anything to add about the whole design? (optional)"
+                rows={3}
+              />
               <div className="row mt">
                 <button className="btn bk" disabled={busy} onClick={requestEdits}>
                   {busy ? 'SENDING...' : 'SEND FOR EDITS'}
@@ -464,6 +515,11 @@ export default function ClientReview({ project, sku, versions, comments, approva
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2 className="display mb">FINAL APPROVAL</h2>
             <p style={{ fontWeight: 800 }}>{skuLabel(sku)} · v{proofs[proofs.length - 1]?.version_number}</p>
+            {viewingOlder && (
+              <div className="notice mt">
+                You were viewing v{selected.version_number}. Approval always applies to the latest version, v{latestProof.version_number}.
+              </div>
+            )}
             <p className="mt mb">Once approved, this design locks and goes to print. Confirm each check:</p>
             {APPROVAL_CHECKS.map((label, i) => (
               <label key={i} className={`check-item ${checks[i] ? 'checked' : ''}`}>

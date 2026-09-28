@@ -29,7 +29,6 @@ Live at: proof.made2ordermerch.com
 | `AUTH_SECRET` | Any long random string (signs the admin cookie) |
 | `ADMIN_EMAIL` | Your email. Internal notifications go here plus design@. |
 | `BASE_URL` | `https://proof.made2ordermerch.com` |
-| `HUB_SECRET` | Optional. Shared secret for the FD99 hub link endpoint. |
 
 5. **Domain.** Add `proof.made2ordermerch.com` in Vercel, then in Shopify admin (where DNS lives) add a CNAME record: `proof` -> `cname.vercel-dns.com`.
 
@@ -46,11 +45,23 @@ Live at: proof.made2ordermerch.com
 
 Internal comments: check "Internal only" when commenting in admin. Clients never see them (dashed border style in admin).
 
-Magic links expire after 30 days. Clients self-serve fresh links from the portal home page; you can also mint and email one from the project page.
+Magic links expire after 30 days. Clients self-serve fresh links from the portal home page; you can also mint and email one from the project page. Minting a new link retires every earlier link for that project at once, so treat NEW LINK as a revocation, not a convenience.
 
-## FD99 hub integration (optional)
+## Who gets emailed, and when
 
-`GET /api/hub/portal-link?shopify_order_id=XXXX&secret=HUB_SECRET` returns `{ link }` with a fresh 30-day portal link for the project mapped to that order. Call it server-side from the hub and render a "REVIEW YOUR DESIGNS" button.
+Client (from design@, multipart text + HTML):
+- Portal invite, when a project is created with the box ticked or a link is re-sent.
+- Proof ready, when a proof is uploaded with notify on, or a SKU is flipped to PROOF READY with notify on. Links straight into that design.
+- Design team replied, when the team posts a non-internal comment. At most one per design per 30 minutes.
+- Approval confirmed, at approval, with the 4 business hour flag window.
+
+Team (design@ plus ADMIN_EMAIL):
+- Review started, on the client's first comment on a version. Later comments in the round are silent.
+- Edits requested, when the client sends the design back. Carries their round note and every open comment.
+- Client replied, when the client answers a team thread. At most one per design per 30 minutes.
+- Approved, at approval.
+
+Changing ADMIN_PASSWORD in Vercel logs every admin session out on the next request.
 
 ## Built for what comes next (reorder path)
 

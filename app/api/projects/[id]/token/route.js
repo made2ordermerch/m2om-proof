@@ -14,13 +14,14 @@ export async function POST(request, { params }) {
   if (!project) return Response.json({ error: 'Not found' }, { status: 404 });
 
   const { resend } = await request.json().catch(() => ({}));
-  const token = await createTokenForProject(projectId);
+  // A regenerated link is a revocation: every earlier link stops working now.
+  const token = await createTokenForProject(projectId, { retireOthers: true });
   const link = `${process.env.BASE_URL}/p/${token}`;
 
   if (resend) {
     const mail = inviteEmail({ ref: project.ref, link, clientName: project.client_name });
     await sendEmail({ to: project.client_email, ...mail });
   }
-  await logEvent(projectId, 'token_generated', { resend: !!resend });
+  await logEvent(projectId, 'token_generated', { resend: !!resend, retired_earlier: true });
   return Response.json({ link });
 }

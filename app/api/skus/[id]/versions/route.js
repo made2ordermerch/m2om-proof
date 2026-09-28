@@ -3,7 +3,7 @@ import { sql } from '@/lib/db';
 import { skuWithProject, logEvent } from '@/lib/data';
 import { sendEmail } from '@/lib/email';
 import { proofReadyEmail } from '@/lib/templates';
-import { skuLabel } from '@/lib/statuses';
+import { skuLabel, portalLink } from '@/lib/statuses';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -78,7 +78,7 @@ export async function POST(request, { params }) {
         if (!tokens[0]) {
           notifyNote = 'No active portal link for this project, so no email was sent. Generate a link first.';
         } else {
-          const link = `${process.env.BASE_URL}/p/${tokens[0].token}`;
+          const link = portalLink(tokens[0].token, skuId);
           const mail = proofReadyEmail({
             ref: sku.p_ref,
             link,

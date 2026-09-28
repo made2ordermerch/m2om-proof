@@ -4,7 +4,7 @@ import ClientPortal from '@/components/ClientPortal';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ClientPortalPage({ params }) {
+export default async function ClientPortalPage({ params, searchParams }) {
   const project = await projectFromToken(params.token);
 
   if (!project) {
@@ -23,5 +23,14 @@ export default async function ClientPortalPage({ params }) {
 
   const bundle = await getProjectBundle(project.id, { includeInternal: false });
   const returning = await hasApprovedBefore(project.client_email, project.id);
-  return <ClientPortal token={params.token} bundle={bundle} returning={returning} />;
+  // ?sku=<id> from an email lands the client straight on that design.
+  const initialSkuId = Number(searchParams?.sku) || null;
+  return (
+    <ClientPortal
+      token={params.token}
+      bundle={bundle}
+      returning={returning}
+      initialSkuId={initialSkuId}
+    />
+  );
 }

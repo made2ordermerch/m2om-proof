@@ -3,7 +3,7 @@ import { sql } from '@/lib/db';
 import { skuWithProject, logEvent } from '@/lib/data';
 import { sendEmail } from '@/lib/email';
 import { proofReadyEmail } from '@/lib/templates';
-import { STATUSES, skuLabel } from '@/lib/statuses';
+import { STATUSES, skuLabel, portalLink } from '@/lib/statuses';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +30,7 @@ export async function PATCH(request, { params }) {
         SELECT version_number FROM proof_versions
         WHERE sku_id = ${skuId} AND kind = 'proof'
         ORDER BY version_number DESC LIMIT 1`;
-      const link = `${process.env.BASE_URL}/p/${tokens[0].token}`;
+      const link = portalLink(tokens[0].token, skuId);
       const mail = proofReadyEmail({
         ref: sku.p_ref,
         link,

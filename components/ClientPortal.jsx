@@ -5,12 +5,30 @@ import useLiveRefresh from '@/lib/useLiveRefresh';
 import ClientReview from './ClientReview';
 import { skuLabel, StatusBadge } from './SkuReview';
 
-export default function ClientPortal({ token, bundle, returning = false }) {
+export default function ClientPortal({ token, bundle, returning = false, initialSkuId = null }) {
   const { project, skus, versions, comments, approvals } = bundle;
-  const [openSkuId, setOpenSkuId] = useState(null);
-  // A brand that has approved with us before does not need the walkthrough
-  // opened for them again. An explicit choice below still overrides this.
-  const [howOpen, setHowOpen] = useState(!returning);
+  // A deep link only counts if the design is actually in this project.
+  const [openSkuId, setOpenSkuId] = useState(
+    initialSkuId && skus.some((s) => s.id === initialSkuId) ? initialSkuId : null
+  );
+
+  // Keep ?sku= in the address bar in step with what is open, so a reload or a
+  // shared link lands on the same design and the back button leaves it.
+  function openDesign(id) {
+    setOpenSkuId(id);
+    try {
+      const url = new URL(window.location.href);
+      if (id) url.searchParams.set('sku', String(id));
+      else url.searchParams.delete('sku');
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
+  }
+  // The walkthrough opens by default only when there is nothing else to do on
+  // the page. A returning brand has seen it, and a brand with a proof waiting
+  // has the yellow card telling them exactly what to do next. On a phone the
+  // five steps would otherwise push the designs a full screen down.
+  const hasWaiting = skus.some((s) => s.status === 'proof_ready');
+  const [howOpen, setHowOpen] = useState(!returning && !hasWaiting);
 
   // Clients leave this tab open waiting on a proof. Keep it current.
   useLiveRefresh();
@@ -44,12 +62,15 @@ export default function ClientPortal({ token, bundle, returning = false }) {
         comments={comments.filter((c) => c.sku_id === openSku.id)}
         approval={approvals.find((a) => a.sku_id === openSku.id)}
         token={token}
-        onBack={() => setOpenSkuId(null)}
+        onBack={() => openDesign(null)}
       />
     );
   }
 
   const doneCount = skus.filter((s) => ['approved', 'in_production'].includes(s.status)).length;
+  const waiting = skus.filter((s) => s.status === 'proof_ready');
+  const withTeam = skus.filter((s) => !['approved', 'in_production', 'proof_ready'].includes(s.status));
+  const allDone = skus.length > 0 && doneCount === skus.length;
 
   return (
     <main className="wrap" style={{ paddingTop: 28 }}>
@@ -58,11 +79,48 @@ export default function ClientPortal({ token, bundle, returning = false }) {
         {project.ref} · {project.client_name}
       </p>
 
+      {/* The first thing on the page answers the only question a client has:
+          is anything waiting on me. */}
+      {skus.length > 0 && (
+        <div className={`card ${waiting.length ? 'yl' : 'off'} next-action`}>
+          {waiting.length > 0 ? (
+            <>
+              <h2 className="display">
+                {waiting.length} DESIGN{waiting.length === 1 ? '' : 'S'} WAITING ON YOU
+              </h2>
+              <p className="mt">
+                {waiting.length === 1
+                  ? `${skuLabel(waiting[0])} has a proof ready for your review.`
+                  : 'Each one has a proof ready. Review and approve them one at a time.'}
+              </p>
+              <button className="btn bk mt" onClick={() => openDesign(waiting[0].id)}>
+                REVIEW {waiting.length === 1 ? 'IT NOW' : skuLabel(waiting[0]).toUpperCase()}
+              </button>
+            </>
+          ) : allDone ? (
+            <>
+              <h2 className="display">EVERY DESIGN IS APPROVED</h2>
+              <p className="mt">
+                Nothing more is needed from you. Your approved files are locked and on their way to print.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="display">NOTHING NEEDED FROM YOU RIGHT NOW</h2>
+              <p className="mt">
+                The design team is working on {withTeam.length === 1 ? 'your design' : `${withTeam.length} designs`}.
+                You will get an email the moment a proof is ready to review.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="card">
         <div className="spread">
           <h2 className="display">HOW THIS WORKS</h2>
           <button className="btn sm ghost" onClick={toggleHow}>
-            {howOpen ? 'HIDE' : 'SHOW ME AGAIN'}
+            {howOpen ? 'HIDE' : 'SHOW ME'}
           </button>
         </div>
 
@@ -155,14 +213,13 @@ export default function ClientPortal({ token, bundle, returning = false }) {
         const openComments = comments.filter(
           (c) => c.sku_id === sku.id && !c.parent_id && !c.resolved
         ).length;
-        const needsYou = sku.status === 'proof_ready';
 
         return (
           <button
             key={sku.id}
             className="tile"
             style={{ animationDelay: `${i * 60}ms` }}
-            onClick={() => setOpenSkuId(sku.id)}
+            onClick={() => openDesign(sku.id)}
           >
             <span className="thumb">
               {latest ? (
@@ -174,28 +231,14 @@ export default function ClientPortal({ token, bundle, returning = false }) {
             <span className="body">
               <span className="name">{skuLabel(sku)}</span>
               <span className="meta-row">
-                <StatusBadge status={sku.status} />
+                <StatusBadge status={sku.status} audience="client" />
                 {latest && <span className="small" style={{ fontWeight: 800 }}>v{latest.version_number}</span>}
-                {openComments > 0 && (
+                {openComments > 0 && !['approved', 'in_production'].includes(sku.status) && (
                   <span className="small" style={{ fontWeight: 800 }}>
                     {openComments} open comment{openComments === 1 ? '' : 's'}
                   </span>
                 )}
               </span>
-              {needsYou && (
-                <span
-                  className="small"
-                  style={{
-                    fontWeight: 800,
-                    background: 'var(--yl)',
-                    border: '1.5px solid var(--bk)',
-                    padding: '2px 8px',
-                    alignSelf: 'flex-start',
-                  }}
-                >
-                  READY FOR YOUR REVIEW
-                </span>
-              )}
             </span>
             <span className="chev">→</span>
           </button>

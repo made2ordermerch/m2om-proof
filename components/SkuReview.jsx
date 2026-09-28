@@ -3,15 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ProofViewer from './ProofViewer';
-
-const STATUS_LABELS = {
-  artwork_ordered: 'ARTWORK ORDERED',
-  being_designed: 'BEING DESIGNED',
-  proof_ready: 'PROOF READY',
-  edits_requested: 'EDITS REQUESTED',
-  approved: 'APPROVED',
-  in_production: 'IN PRODUCTION',
-};
+import { STATUS_LABELS, CLIENT_STATUS_LABELS } from '@/lib/statuses';
 
 export function skuLabel(sku) {
   const parts = [sku.size, sku.product_type];
@@ -19,8 +11,11 @@ export function skuLabel(sku) {
   return parts.join(' - ');
 }
 
-export function StatusBadge({ status }) {
-  return <span className={`badge ${status}`}>{STATUS_LABELS[status] || status}</span>;
+// audience 'client' shows whose turn it is in plain words. Admin keeps the
+// internal stage names.
+export function StatusBadge({ status, audience = 'team' }) {
+  const labels = audience === 'client' ? CLIENT_STATUS_LABELS : STATUS_LABELS;
+  return <span className={`badge ${status}`}>{labels[status] || status}</span>;
 }
 
 // role: 'client' | 'team'. token: proof token for client requests (null for admin).

@@ -251,7 +251,7 @@ export default function AdminProject({ bundle, portalLink }) {
     setBusy(false);
     if (j.link) {
       try { await navigator.clipboard.writeText(j.link); } catch {}
-      alert((resend ? 'New link emailed to the client.\n\n' : '') + 'Portal link copied:\n' + j.link);
+      alert((resend ? 'New link emailed to the client.\n\n' : '') + 'Portal link copied:\n' + j.link + '\n\nEvery earlier link for this project has stopped working.');
       router.refresh();
     }
   }
@@ -321,6 +321,7 @@ export default function AdminProject({ bundle, portalLink }) {
           <div className="small" style={{ wordBreak: 'break-all' }}>
             <strong>PORTAL LINK:</strong>{' '}
             {portalLink || 'No active link. Generate one below.'}
+            <div className="small" style={{ fontWeight: 400, marginTop: 4 }}>A new link retires every earlier one. Use it to revoke access, not just to copy.</div>
           </div>
           <div className="row">
             {portalLink && (
