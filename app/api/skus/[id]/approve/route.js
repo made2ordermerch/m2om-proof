@@ -20,6 +20,12 @@ export async function POST(request, { params }) {
   if (['approved', 'in_production'].includes(sku.status)) {
     return Response.json({ error: 'Already approved.' }, { status: 400 });
   }
+  if (sku.status === 'edits_requested') {
+    return Response.json(
+      { error: 'This design is with the design team for edits. Approve it once the next version is ready.' },
+      { status: 400 }
+    );
+  }
 
   const { typed_name, agreed, version_id } = await request.json().catch(() => ({}));
   if (!agreed || !typed_name || !typed_name.trim()) {

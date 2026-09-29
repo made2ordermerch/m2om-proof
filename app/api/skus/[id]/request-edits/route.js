@@ -20,6 +20,12 @@ export async function POST(request, { params }) {
   if (['approved', 'in_production'].includes(sku.status)) {
     return Response.json({ error: 'This design is already approved.' }, { status: 400 });
   }
+  if (sku.status === 'edits_requested') {
+    return Response.json(
+      { error: 'This design is already with the design team. You will get an email when the next version is ready.' },
+      { status: 400 }
+    );
+  }
 
   const latest = await sql`
     SELECT id, version_number FROM proof_versions

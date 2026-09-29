@@ -33,6 +33,26 @@ export async function POST(request) {
     return Response.json({ error: 'Write a comment first.' }, { status: 400 });
   }
 
+  // A closed round stays closed. While the design is with the team the client
+  // can only answer a thread the team has spoken in.
+  if (!admin && sku.status === 'edits_requested') {
+    let allowed = false;
+    if (parent_id) {
+      const rows = await sql`
+        SELECT 1 FROM proof_comments
+        WHERE (id = ${Number(parent_id)} OR parent_id = ${Number(parent_id)})
+          AND author_role = 'team' AND internal = false
+        LIMIT 1`;
+      allowed = rows.length > 0;
+    }
+    if (!allowed) {
+      return Response.json(
+        { error: 'This design is with the design team. Reply to your proof email or text us to add to this round.' },
+        { status: 400 }
+      );
+    }
+  }
+
   // A comment can only be filed against a version of the same design.
   let version = null;
   if (version_id) {

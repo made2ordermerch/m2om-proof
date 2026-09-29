@@ -86,7 +86,16 @@ export default function ClientReview({ project, sku, versions, comments, approva
   const openCount = comments.filter((c) => !c.parent_id && !c.resolved).length;
 
   const isLockedState = ['approved', 'in_production'].includes(sku.status);
-  const canAct = proofs.length > 0 && !isLockedState;
+  // Once edits are requested the round is closed. The client waits for the
+  // next version; the only thing still open is answering a question the team
+  // asks in a thread.
+  const withTeam = sku.status === 'edits_requested';
+  const canComment = proofs.length > 0 && !isLockedState && !withTeam;
+  const canAct = canComment;
+  const [justSent, setJustSent] = useState(false);
+  const threadHasTeam = (c) =>
+    c.author_role === 'team' || replies(c.id).some((r) => r.author_role === 'team');
+  const canReply = (c) => canComment || (withTeam && threadHasTeam(c));
 
   async function post(url, body) {
     setBusy(true);
@@ -174,6 +183,9 @@ export default function ClientReview({ project, sku, versions, comments, approva
     if (ok) {
       setEditsOpen(false);
       setEditsNote('');
+      setJustSent(true);
+      exitPinMode();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 
@@ -269,10 +281,14 @@ export default function ClientReview({ project, sku, versions, comments, approva
             </div>
           ) : (
             <>
-              <button className="btn sm" onClick={() => { setReplyFor(c.id); setReplyText(''); }}>REPLY</button>
-              <button className="btn sm" disabled={busy} onClick={() => toggleResolve(c)}>
-                {c.resolved ? 'REOPEN' : 'RESOLVE'}
-              </button>
+              {canReply(c) && (
+                <button className="btn sm" onClick={() => { setReplyFor(c.id); setReplyText(''); }}>REPLY</button>
+              )}
+              {canComment && (
+                <button className="btn sm" disabled={busy} onClick={() => toggleResolve(c)}>
+                  {c.resolved ? 'REOPEN' : 'RESOLVE'}
+                </button>
+              )}
               {isAnchor && selected && c.version_id === selected.id && !c.resolved && (
                 <button className="btn sm ghost" onClick={() => setActivePinId(c.id)}>SHOW ON ARTWORK</button>
               )}
@@ -316,6 +332,21 @@ export default function ClientReview({ project, sku, versions, comments, approva
             <p><strong>2.</strong> Tap COMMENT ON THE ARTWORK, then tap the exact spot.</p>
             <p><strong>3.</strong> One thorough round beats five quick ones. Flag everything you see, then approve when it is perfect.</p>
             <button className="btn sm bk mt" onClick={dismissHint}>GOT IT</button>
+          </div>
+        )}
+
+        {(withTeam || justSent) && (
+          <div className="card yl" style={{ animation: 'fadeUp 0.25s ease both' }}>
+            <h2 className="display">{justSent ? 'EDITS SENT' : 'WITH THE DESIGN TEAM'}</h2>
+            <p className="mt">
+              Your comments{justSent ? ' are on their way to' : ' are with'} the design team.
+              Nothing more is needed from you on this design. You will get an email the moment
+              v{latestProof ? latestProof.version_number + 1 : 2} is ready to review.
+            </p>
+            <p className="small mt">
+              Forgot something? Reply to your proof email, or text 614-353-2369, and we will add it to this round.
+            </p>
+            <button className="btn bk mt" onClick={onBack}>BACK TO ALL DESIGNS</button>
           </div>
         )}
 
@@ -402,7 +433,7 @@ export default function ClientReview({ project, sku, versions, comments, approva
               </div>
             )}
 
-            {selected && selected.kind === 'proof' && !pinMode && (
+            {selected && selected.kind === 'proof' && !pinMode && canComment && (
               <div className="mt" style={{ display: 'flex' }}>
                 <button className="btn yl" style={{ flex: 1 }} onClick={enterPinMode}>
                   + COMMENT ON THE ARTWORK
@@ -416,12 +447,17 @@ export default function ClientReview({ project, sku, versions, comments, approva
 
             {threads.length === 0 && (
               <div className="card off">
-                <p>No comments yet. Write one below, or tap <strong>COMMENT ON THE ARTWORK</strong> to pin it to an exact spot.</p>
+                <p>
+                  {canComment
+                    ? <>No comments yet. Write one below, or tap <strong>COMMENT ON THE ARTWORK</strong> to pin it to an exact spot.</>
+                    : 'No comments on this design.'}
+                </p>
               </div>
             )}
 
             {threads.map((c) => <Thread key={c.id} c={c} />)}
 
+            {canComment && (
             <div className="card off mt">
               <textarea
                 className="textarea"
@@ -440,6 +476,7 @@ export default function ClientReview({ project, sku, versions, comments, approva
                 To point at an exact spot on the artwork, use COMMENT ON THE ARTWORK instead.
               </p>
             </div>
+            )}
           </div>
         </div>
       </div>

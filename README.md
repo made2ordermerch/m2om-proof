@@ -40,7 +40,7 @@ Live at: proof.made2ordermerch.com
 2. Add SKUs: size + product type + flavor/variant. Add more at any time.
 3. Upload a proof (JPG/PNG). It auto-tags v1, v2, v3, sets the SKU to PROOF READY, and emails the client (toggleable per project).
 4. Client reviews in the portal: BROWSE mode to zoom and read, PIN A COMMENT mode to tap a spot and drop a numbered pin, DRAW for freehand markup. General comments live below each design.
-5. Client hits REQUEST EDITS (notifies you + design@) or APPROVE FOR PRINT (typed full name + liability statement, version locks, automated finalization email sends with the 4-business-hour flag window, you are notified).
+5. Client hits REQUEST EDITS (notifies you + design@ with every open comment; the round then closes for the client until the next version lands, except for answering a thread the team spoke in) or APPROVE FOR PRINT (typed full name + liability statement, version locks, automated finalization email sends with the 4-business-hour flag window, you are notified).
 6. When files actually go out, flip the SKU status to IN PRODUCTION manually.
 
 Internal comments: check "Internal only" when commenting in admin. Clients never see them (dashed border style in admin).
