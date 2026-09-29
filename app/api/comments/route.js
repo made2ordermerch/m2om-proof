@@ -47,7 +47,7 @@ export async function POST(request) {
     }
     if (!allowed) {
       return Response.json(
-        { error: 'This design is with the design team. Reply to your proof email or text us to add to this round.' },
+        { error: 'This design is with the design team. You will be able to comment again when the next version is ready.' },
         { status: 400 }
       );
     }
@@ -76,12 +76,23 @@ export async function POST(request) {
   const authorName = admin ? 'M2OM Design Team' : sku.p_client_name;
   const isInternal = admin ? !!internal : false;
 
+  // Every top-level comment on a version is numbered in order, whatever its
+  // kind, so a round reads as "1, 2, 3" in the thread, on the artwork, and
+  // in the edits email. Internal notes are not numbered: the client never
+  // sees them and a gap in their numbering would look like a missing edit.
   let pinNumber = null;
-  if (pin && version && !parent_id) {
+  if (version && !parent_id && !isInternal) {
     const count = await sql`
       SELECT COALESCE(MAX(pin_number), 0) AS n FROM proof_comments
       WHERE version_id = ${version.id} AND pin_number IS NOT NULL`;
     pinNumber = Number(count[0].n) + 1;
+  }
+
+  // A markup is anchored where the stroke starts, so it carries a numbered
+  // marker on the artwork just like a pin.
+  let anchor = pin || null;
+  if (!anchor && drawing && Array.isArray(drawing) && Array.isArray(drawing[0])) {
+    anchor = { x: Number(drawing[0][0]), y: Number(drawing[0][1]) };
   }
 
   // Whether this is the first thing the client has said about this version.
@@ -102,7 +113,7 @@ export async function POST(request) {
     VALUES
       (${sku.id}, ${version ? version.id : null},
        ${parent_id ? Number(parent_id) : null}, ${role}, ${authorName}, ${text},
-       ${pin ? pin.x : null}, ${pin ? pin.y : null}, ${pinNumber},
+       ${anchor ? anchor.x : null}, ${anchor ? anchor.y : null}, ${pinNumber},
        ${drawing ? JSON.stringify(drawing) : null}, ${isInternal})
     RETURNING id`;
   await logEvent(sku.p_id, 'comment_posted', { comment_id: rows[0].id, role, internal: isInternal });

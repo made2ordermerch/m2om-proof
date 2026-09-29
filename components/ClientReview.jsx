@@ -243,7 +243,7 @@ export default function ClientReview({ project, sku, versions, comments, approva
   }
 
   function Thread({ c }) {
-    const isAnchor = c.pin_number || c.drawing;
+    const isAnchor = c.drawing || (c.pin_x !== null && c.pin_x !== undefined);
     const vLabel = versionLabelFor(c);
     return (
       <div
@@ -251,7 +251,8 @@ export default function ClientReview({ project, sku, versions, comments, approva
         className={`comment ${c.resolved ? 'resolved' : ''}`}
       >
         <div className="meta">
-          {c.pin_number ? `PIN ${c.pin_number} · ` : c.drawing ? 'MARKUP · ' : ''}
+          {c.pin_number ? `#${c.pin_number} · ` : ''}
+          {c.drawing ? 'MARKUP · ' : c.pin_x !== null && c.pin_x !== undefined ? 'PIN · ' : ''}
           {vLabel ? `${vLabel} · ` : ''}
           {c.author_role === 'team' ? 'DESIGN TEAM' : c.author_name}
           {c.resolved ? ' · RESOLVED' : ''}
@@ -342,9 +343,6 @@ export default function ClientReview({ project, sku, versions, comments, approva
               Your comments{justSent ? ' are on their way to' : ' are with'} the design team.
               Nothing more is needed from you on this design. You will get an email the moment
               v{latestProof ? latestProof.version_number + 1 : 2} is ready to review.
-            </p>
-            <p className="small mt">
-              Forgot something? Reply to your proof email, or text 614-353-2369, and we will add it to this round.
             </p>
             <button className="btn bk mt" onClick={onBack}>BACK TO ALL DESIGNS</button>
           </div>

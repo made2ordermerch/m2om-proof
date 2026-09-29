@@ -156,7 +156,8 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
     return (
       <div className={`comment ${c.internal ? 'internal' : ''} ${c.resolved ? 'resolved' : ''}`}>
         <div className="meta">
-          {anchored && c.pin_number ? `PIN ${c.pin_number} · ` : anchored && c.drawing ? 'MARKUP · ' : ''}
+          {c.pin_number ? `#${c.pin_number} · ` : ''}
+          {c.drawing ? 'MARKUP · ' : anchored ? 'PIN · ' : ''}
           {vLabel ? `${vLabel} · ` : ''}
           {c.author_name}
           {c.internal ? ' · INTERNAL' : ''}
@@ -334,7 +335,7 @@ export default function SkuReview({ sku, versions, comments, role, token, showIn
         <h3 className="display mb">COMMENTS ({threads.length})</h3>
         {threads.length === 0 && <p className="small mb">No comments yet.</p>}
         {threads.map((c) => (
-          <Thread key={c.id} c={c} anchored={!!(c.pin_number || c.drawing)} />
+          <Thread key={c.id} c={c} anchored={!!(c.drawing || (c.pin_x !== null && c.pin_x !== undefined))} />
         ))}
         <textarea
           className="textarea"

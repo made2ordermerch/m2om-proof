@@ -49,7 +49,7 @@ export async function POST(request, { params }) {
   await sql`UPDATE proof_skus SET status = 'edits_requested' WHERE id = ${skuId}`;
 
   const openComments = await sql`
-    SELECT c.body, c.pin_number, c.drawing IS NOT NULL AS drawing, v.version_number
+    SELECT c.body, c.pin_number, c.pin_x, c.drawing IS NOT NULL AS drawing, v.version_number
     FROM proof_comments c
     LEFT JOIN proof_versions v ON v.id = c.version_id
     WHERE c.sku_id = ${skuId} AND c.parent_id IS NULL AND c.resolved = false
